@@ -4,13 +4,176 @@ import json
 import os
 from datetime import datetime
 
-# Configuración para móviles
+# Configuración de página
 st.set_page_config(
-    page_title="Liga FIFA - Apuestas",
+    page_title="Liga FIFA - Sportsbook",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="collapsed"  # Sidebar cerrado en móviles
+    initial_sidebar_state="collapsed"
 )
+
+# CSS personalizado para estilo profesional de casa de apuestas
+st.markdown("""
+<style>
+    /* Colores corporativos */
+    :root {
+        --primary: #1e40af;
+        --primary-dark: #1e3a8a;
+        --secondary: #dc2626;
+        --success: #059669;
+        --warning: #d97706;
+        --dark: #0f172a;
+        --light: #f8fafc;
+        --gray: #64748b;
+    }
+    
+    .main-header {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 0 0 15px 15px;
+        text-align: center;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        font-weight: 700;
+        font-size: 2rem;
+        letter-spacing: 1px;
+    }
+    
+    .section-header {
+        background: var(--dark);
+        color: white;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        margin: 1.5rem 0 1rem 0;
+        font-weight: 600;
+        font-size: 1.2rem;
+        border-left: 4px solid var(--secondary);
+    }
+    
+    .bet-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        transition: all 0.3s ease;
+    }
+    
+    .bet-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .bet-card.won {
+        border-left: 4px solid var(--success);
+    }
+    
+    .bet-card.lost {
+        border-left: 4px solid var(--secondary);
+    }
+    
+    .bet-card.pending {
+        border-left: 4px solid var(--warning);
+    }
+    
+    .odds-button {
+        background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        color: white;
+        border: none;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        width: 100%;
+        margin: 0.25rem 0;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .odds-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    
+    .odds-button.local {
+        background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+    }
+    
+    .odds-button.draw {
+        background: linear-gradient(135deg, #475569 0%, #334155 100%);
+    }
+    
+    .odds-button.visitor {
+        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    }
+    
+    .balance-card {
+        background: linear-gradient(135deg, var(--success) 0%, #047857 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        text-align: center;
+        margin: 1rem 0;
+    }
+    
+    .stats-card {
+        background: var(--light);
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1rem;
+        text-align: center;
+        margin: 0.5rem 0;
+    }
+    
+    .team-badge {
+        display: inline-block;
+        background: var(--light);
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        margin: 0.25rem;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .match-header {
+        background: var(--dark);
+        color: white;
+        padding: 0.75rem;
+        border-radius: 8px 8px 0 0;
+        font-weight: 600;
+        text-align: center;
+    }
+    
+    .table-header {
+        background: var(--primary);
+        color: white;
+    }
+    
+    /* Sidebar styling */
+    .sidebar .sidebar-content {
+        background: var(--light);
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: var(--light);
+        border-radius: 8px 8px 0 0;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: var(--primary);
+        color: white;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Cargar datos del torneo
 def load_tournament_data():
@@ -20,8 +183,8 @@ def load_tournament_data():
     except FileNotFoundError:
         return {
             "groups": {
-                "Grupo A": ["Liverpool", "Bayern", "Atlético Nacional", "Barcelona"],
-                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín"]
+                "Grupo A": ["Liverpool", "Bayern Munich", "Atlético Nacional", "Barcelona"],
+                "Grupo B": ["Real Madrid", "AC Milan", "Independiente Medellín", "Paris SG"]
             },
             "players": {},
             "matches": [],
@@ -39,10 +202,8 @@ def save_tournament_data(data):
 
 # Funciones auxiliares
 def obtener_partidos_sin_resultado():
-    """Obtiene partidos sin resultado registrado"""
     partidos_sin_resultado = []
 
-    # Partidos de grupos sin jugar
     for grupo, equipos in st.session_state.tournament_data["groups"].items():
         for i, local in enumerate(equipos):
             for j, visitante in enumerate(equipos):
@@ -63,7 +224,6 @@ def obtener_partidos_sin_resultado():
     return partidos_sin_resultado
 
 def calcular_tabla(grupo):
-    """Calcula la tabla de posiciones de un grupo"""
     equipos = st.session_state.tournament_data["groups"][grupo]
     partidos = [p for p in st.session_state.tournament_data["matches"]
                 if p.get("grupo") == grupo and p.get("fase") == "groups"]
@@ -105,7 +265,6 @@ def calcular_tabla(grupo):
     return df
 
 def obtener_clasificados_semifinales():
-    """Obtiene los clasificados a semifinales"""
     clasificados = []
     for grupo in ["Grupo A", "Grupo B"]:
         df = calcular_tabla(grupo)
@@ -114,7 +273,6 @@ def obtener_clasificados_semifinales():
     return clasificados
 
 def procesar_apuestas_partido(partido):
-    """Procesa las apuestas de un partido"""
     partido_key = f"{partido['local']} vs {partido['visitante']}"
     goles_local = partido['goles_local']
     goles_visitante = partido['goles_visitante']
@@ -141,82 +299,76 @@ def procesar_apuestas_partido(partido):
 
             apuesta["procesada"] = True
 
-# Funciones de UI
+# Funciones de UI mejoradas
 def mostrar_panel_apuestas_movil():
-    """Muestra el panel de apuestas en el sidebar"""
-    st.markdown("### 🎯 Hacer Apuesta")
+    st.markdown('<div class="section-header">HACER APUESTA</div>', unsafe_allow_html=True)
 
     if not st.session_state.tournament_data["players"]:
-        st.info("👤 Registra tu nombre arriba para apostar")
+        st.info("Registra tu nombre para comenzar a apostar")
         return
 
-    jugador = st.selectbox("Eres:", list(st.session_state.tournament_data["players"].keys()))
+    jugador = st.selectbox("SELECCIONAR JUGADOR", list(st.session_state.tournament_data["players"].keys()))
 
-    # Mostrar dinero disponible
+    # Tarjeta de balance
     dinero_actual = st.session_state.tournament_data["players"][jugador]["dinero"]
-    st.markdown(f"**Dinero disponible:** `${dinero_actual}`")
+    st.markdown(f'''
+    <div class="balance-card">
+        <div style="font-size: 0.9rem; opacity: 0.9;">BALANCE DISPONIBLE</div>
+        <div style="font-size: 1.8rem; font-weight: 700;">${dinero_actual:,}</div>
+    </div>
+    ''', unsafe_allow_html=True)
 
     # Partidos disponibles para apostar
     partidos_disponibles = obtener_partidos_sin_resultado()
 
     if not partidos_disponibles:
-        st.info("⏳ No hay partidos para apostar")
+        st.info("No hay partidos disponibles para apostar")
         return
 
+    # Selector de partido
     partido_apostar = st.selectbox(
-        "Partido:",
+        "SELECCIONAR PARTIDO",
         partidos_disponibles,
-        format_func=lambda x: f"{x['local']} vs {x['visitante']}",
+        format_func=lambda x: f"{x['local']} vs {x['visitante']} - {x['grupo']}",
         key="apuesta_partido"
     )
 
-    # Opciones de apuesta en botones
-    st.markdown("**Tu predicción:**")
+    # Cuotas de apuesta (simuladas)
+    st.markdown('<div style="margin: 1rem 0; font-weight: 600; text-align: center;">CUOTAS DEL PARTIDO</div>', unsafe_allow_html=True)
+    
     col1, col2, col3 = st.columns(3)
-
-    def hacer_apuesta_rapida(prediccion):
-        monto = min(200, dinero_actual)
-        if monto > dinero_actual:
-            st.error("❌ No tienes suficiente dinero")
-            return
-        
-        nueva_apuesta = {
-            "jugador": jugador,
-            "partido": f"{partido_apostar['local']} vs {partido_apostar['visitante']}",
-            "local": partido_apostar['local'],
-            "visitante": partido_apostar['visitante'],
-            "prediccion": prediccion,
-            "monto": monto,
-            "fase": partido_apostar.get('fase', 'groups'),
-            "procesada": False
-        }
-
-        st.session_state.tournament_data["players"][jugador]["dinero"] -= monto
-        st.session_state.tournament_data["bets"].append(nueva_apuesta)
-        save_tournament_data(st.session_state.tournament_data)
-        st.success(f"✅ Apostaste ${monto} por {prediccion}")
-        st.rerun()
-
+    
     with col1:
-        if st.button(f"🏠 {partido_apostar['local']}", use_container_width=True, key="local_btn"):
-            hacer_apuesta_rapida("Local")
-
+        st.markdown('<div class="odds-button local" onclick="alert(\'Apuesta local\')">'
+                   f'<div>{partido_apostar["local"]}</div>'
+                   '<div style="font-size: 1.2rem; margin-top: 0.5rem;">2.10</div>'
+                   '</div>', unsafe_allow_html=True)
+    
     with col2:
-        if st.button("🤝 Empate", use_container_width=True, key="empate_btn"):
-            hacer_apuesta_rapida("Empate")
-
+        st.markdown('<div class="odds-button draw">'
+                   '<div>EMPATE</div>'
+                   '<div style="font-size: 1.2rem; margin-top: 0.5rem;">3.25</div>'
+                   '</div>', unsafe_allow_html=True)
+    
     with col3:
-        if st.button(f"✈️ {partido_apostar['visitante']}", use_container_width=True, key="visitante_btn"):
-            hacer_apuesta_rapida("Visitante")
+        st.markdown('<div class="odds-button visitor">'
+                   f'<div>{partido_apostar["visitante"]}</div>'
+                   '<div style="font-size: 1.2rem; margin-top: 0.5rem;">2.80</div>'
+                   '</div>', unsafe_allow_html=True)
 
     # Apuesta personalizada
-    with st.expander("💰 Apuesta personalizada"):
-        opcion_apuesta = st.selectbox("Predicción", ["Local", "Empate", "Visitante"], key="prediccion_select")
-        monto_apuesta = st.number_input("Monto", min_value=10, max_value=dinero_actual, value=100, step=10, key="monto_input")
+    with st.expander("APUESTA PERSONALIZADA", expanded=False):
+        col_pred, col_monto = st.columns(2)
+        
+        with col_pred:
+            opcion_apuesta = st.selectbox("PREDICCIÓN", ["Local", "Empate", "Visitante"], key="prediccion_select")
+        
+        with col_monto:
+            monto_apuesta = st.number_input("MONTO ($)", min_value=10, max_value=dinero_actual, value=100, step=10, key="monto_input")
 
-        if st.button("Apostar", type="primary", key="apostar_btn"):
+        if st.button("CONFIRMAR APUESTA", type="primary", use_container_width=True):
             if monto_apuesta > dinero_actual:
-                st.error("❌ No tienes suficiente dinero")
+                st.error("Fondos insuficientes")
                 return
 
             nueva_apuesta = {
@@ -233,45 +385,51 @@ def mostrar_panel_apuestas_movil():
             st.session_state.tournament_data["players"][jugador]["dinero"] -= monto_apuesta
             st.session_state.tournament_data["bets"].append(nueva_apuesta)
             save_tournament_data(st.session_state.tournament_data)
-            st.success(f"✅ Apostaste ${monto_apuesta} por {opcion_apuesta}")
+            st.success(f"Apuesta confirmada: ${monto_apuesta} por {opcion_apuesta}")
             st.rerun()
 
 def mostrar_torneo():
-    """Muestra la información del torneo"""
-    st.markdown("### 📊 Fase de Grupos")
+    st.markdown('<div class="section-header">FASE DE GRUPOS</div>', unsafe_allow_html=True)
 
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("**Grupo A**")
+        st.markdown("**GRUPO A**")
         df_a = calcular_tabla("Grupo A")
         st.dataframe(df_a, use_container_width=True, hide_index=True)
 
     with col2:
-        st.markdown("**Grupo B**")
+        st.markdown("**GRUPO B**")
         df_b = calcular_tabla("Grupo B")
         st.dataframe(df_b, use_container_width=True, hide_index=True)
 
     # Próximos partidos
-    st.markdown("### ⏭️ Próximos Partidos")
-    partidos_futuros = obtener_partidos_sin_resultado()[:3]  # Mostrar solo 3
+    st.markdown('<div class="section-header">PRÓXIMOS PARTIDOS</div>', unsafe_allow_html=True)
+    partidos_futuros = obtener_partidos_sin_resultado()[:4]
+    
     if partidos_futuros:
         for partido in partidos_futuros:
-            st.write(f"**{partido['local']}** vs **{partido['visitante']}**")
+            col1, col2, col3 = st.columns([2,1,2])
+            with col1:
+                st.markdown(f'<div style="text-align: right; font-weight: 600;">{partido["local"]}</div>', unsafe_allow_html=True)
+            with col2:
+                st.markdown('<div style="text-align: center; color: var(--gray);">VS</div>', unsafe_allow_html=True)
+            with col3:
+                st.markdown(f'<div style="text-align: left; font-weight: 600;">{partido["visitante"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div style="text-align: center; color: var(--gray); font-size: 0.8rem;">{partido["grupo"]}</div>', unsafe_allow_html=True)
+            st.markdown("---")
     else:
-        st.info("🎉 Todos los partidos han sido jugados")
+        st.info("Todos los partidos de grupos han sido jugados")
 
 def mostrar_apuestas():
-    """Muestra el historial de apuestas"""
-    st.markdown("### 📋 Tus Apuestas")
+    st.markdown('<div class="section-header">HISTORIAL DE APUESTAS</div>', unsafe_allow_html=True)
 
     if not st.session_state.tournament_data["players"]:
-        st.info("👤 Regístrate en el panel de control")
+        st.info("Regístrate para ver tu historial de apuestas")
         return
 
-    # Selector de jugador
     jugador_actual = st.selectbox(
-        "Selecciona tu jugador:",
+        "JUGADOR",
         list(st.session_state.tournament_data["players"].keys()),
         key="jugador_apuestas"
     )
@@ -279,29 +437,58 @@ def mostrar_apuestas():
     apuestas_jugador = [a for a in st.session_state.tournament_data["bets"] if a["jugador"] == jugador_actual]
 
     if not apuestas_jugador:
-        st.info("📝 Aún no has hecho apuestas")
+        st.info("No hay apuestas registradas")
         return
 
+    # Estadísticas rápidas
+    apuestas_ganadas = len([a for a in apuestas_jugador if a.get("resultado") == "GANADA"])
+    apuestas_perdidas = len([a for a in apuestas_jugador if a.get("resultado") == "PERDIDA"])
+    apuestas_pendientes = len([a for a in apuestas_jugador if not a.get("procesada", False)])
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown(f'<div class="stats-card">'
+                   f'<div style="color: var(--success); font-size: 1.5rem; font-weight: 700;">{apuestas_ganadas}</div>'
+                   f'<div>Ganadas</div></div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown(f'<div class="stats-card">'
+                   f'<div style="color: var(--secondary); font-size: 1.5rem; font-weight: 700;">{apuestas_perdidas}</div>'
+                   f'<div>Perdidas</div></div>', unsafe_allow_html=True)
+    with col3:
+        st.markdown(f'<div class="stats-card">'
+                   f'<div style="color: var(--warning); font-size: 1.5rem; font-weight: 700;">{apuestas_pendientes}</div>'
+                   f'<div>Pendientes</div></div>', unsafe_allow_html=True)
+
+    # Lista de apuestas
     for apuesta in reversed(apuestas_jugador):
-        estado = "✅ GANADA" if apuesta.get("resultado") == "GANADA" else "❌ PERDIDA" if apuesta.get("resultado") == "PERDIDA" else "⏳ PENDIENTE"
-        color = "green" if apuesta.get("resultado") == "GANADA" else "red" if apuesta.get("resultado") == "PERDIDA" else "gray"
+        estado_clase = "won" if apuesta.get("resultado") == "GANADA" else "lost" if apuesta.get("resultado") == "PERDIDA" else "pending"
+        estado_texto = "GANADA" if apuesta.get("resultado") == "GANADA" else "PERDIDA" if apuesta.get("resultado") == "PERDIDA" else "PENDIENTE"
+        estado_color = "var(--success)" if estado_clase == "won" else "var(--secondary)" if estado_clase == "lost" else "var(--warning)"
         
-        st.markdown(f"""
-        <div style='border: 1px solid {color}; padding: 10px; border-radius: 5px; margin: 5px 0;'>
-            <h4>{apuesta['partido']}</h4>
-            <p><strong>Predicción:</strong> {apuesta['prediccion']} - ${apuesta['monto']} - {estado}</p>
-        """, unsafe_allow_html=True)
+        st.markdown(f'''
+        <div class="bet-card {estado_clase}">
+            <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 0.5rem;">
+                <div style="font-weight: 600; font-size: 1.1rem;">{apuesta['partido']}</div>
+                <div style="background: {estado_color}; color: white; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600;">
+                    {estado_texto}
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; color: var(--gray); font-size: 0.9rem;">
+                <div>Predicción: <strong>{apuesta['prediccion']}</strong></div>
+                <div>Monto: <strong>${apuesta['monto']}</strong></div>
+            </div>
+        ''', unsafe_allow_html=True)
         
         if apuesta.get("ganancias"):
-            st.write(f"**Ganancias:** ${apuesta['ganancias']}")
-        st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown(f'<div style="color: var(--success); font-weight: 600; margin-top: 0.5rem;">Ganancias: ${apuesta["ganancias"]}</div>', unsafe_allow_html=True)
+        
+        st.markdown('</div>', unsafe_allow_html=True)
 
 def mostrar_posiciones():
-    """Muestra el ranking de apostadores"""
-    st.markdown("### 🏆 Ranking de Apostadores")
+    st.markdown('<div class="section-header">RANKING DE APOSTADORES</div>', unsafe_allow_html=True)
 
     if not st.session_state.tournament_data["players"]:
-        st.info("👥 Aún no hay jugadores")
+        st.info("No hay jugadores registrados")
         return
 
     jugadores_data = []
@@ -316,58 +503,76 @@ def mostrar_posiciones():
 
     df_jugadores = pd.DataFrame(jugadores_data)
     df_jugadores = df_jugadores.sort_values("Dinero", ascending=False)
+    
+    # Formatear dinero
     df_jugadores["Dinero"] = "$" + df_jugadores["Dinero"].astype(str)
-    st.dataframe(df_jugadores, use_container_width=True, hide_index=True)
+    
+    # Aplicar estilo a la tabla
+    st.dataframe(
+        df_jugadores,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Jugador": st.column_config.TextColumn(width="medium"),
+            "Dinero": st.column_config.TextColumn(width="small"),
+            "Ganadas": st.column_config.NumberColumn(width="small"),
+            "Perdidas": st.column_config.NumberColumn(width="small"),
+            "Balance": st.column_config.NumberColumn(width="small")
+        }
+    )
 
 def mostrar_admin():
-    """Muestra el panel de administración"""
-    st.markdown("### ⚙️ Panel de Administración")
+    st.markdown('<div class="section-header">PANEL DE ADMINISTRACIÓN</div>', unsafe_allow_html=True)
 
     # Registrar resultados
-    st.markdown("#### 📝 Registrar Resultados")
+    st.markdown("**REGISTRAR RESULTADOS**")
     partidos_sin_resultado = obtener_partidos_sin_resultado()
 
     if partidos_sin_resultado:
         partido_registrar = st.selectbox(
-            "Seleccionar partido:",
+            "SELECCIONAR PARTIDO",
             partidos_sin_resultado,
-            format_func=lambda x: f"{x['local']} vs {x['visitante']}",
+            format_func=lambda x: f"{x['local']} vs {x['visitante']} - {x['grupo']}",
             key="admin_partido"
         )
 
-        col1, col2 = st.columns(2)
+        col1, col2, col3 = st.columns(3)
         with col1:
+            st.markdown(f"**{partido_registrar['local']}**")
             goles_local = st.number_input("Goles local", min_value=0, value=0, key="admin_gl")
         with col2:
+            st.markdown("**VS**")
+            st.markdown("")  # Espacio vacío para alineación
+        with col3:
+            st.markdown(f"**{partido_registrar['visitante']}**")
             goles_visitante = st.number_input("Goles visitante", min_value=0, value=0, key="admin_gv")
 
-        if st.button("Registrar Resultado", type="primary", key="registrar_btn"):
+        if st.button("REGISTRAR RESULTADO", type="primary", use_container_width=True):
             registrar_resultado_admin(partido_registrar, goles_local, goles_visitante)
     else:
-        st.info("✅ Todos los partidos tienen resultado")
+        st.info("Todos los partidos tienen resultado registrado")
 
     # Avanzar fases
-    st.markdown("#### 🚀 Control del Torneo")
+    st.markdown("**CONTROL DEL TORNEO**")
     if st.session_state.tournament_data["phase"] == "groups":
-        if st.button("Avanzar a Semifinales", key="avanzar_btn"):
+        if st.button("AVANZAR A SEMIFINALES", use_container_width=True):
             clasificados = obtener_clasificados_semifinales()
             if len(clasificados) == 4:
                 st.session_state.tournament_data["phase"] = "semifinals"
                 save_tournament_data(st.session_state.tournament_data)
-                st.success("🎉 Avanzando a Semifinales!")
+                st.success("Torneo avanzado a semifinales")
                 st.rerun()
             else:
-                st.error("❌ No hay suficientes equipos clasificados")
+                st.error("No hay suficientes equipos clasificados")
 
     # Reiniciar
-    if st.button("🔄 Reiniciar Torneo", type="secondary", key="reiniciar_btn"):
+    if st.button("REINICIAR TORNEO", type="secondary", use_container_width=True):
         st.session_state.tournament_data = load_tournament_data()
         save_tournament_data(st.session_state.tournament_data)
-        st.success("🔄 Torneo reiniciado")
+        st.success("Torneo reiniciado exitosamente")
         st.rerun()
 
 def registrar_resultado_admin(partido, goles_local, goles_visitante):
-    """Registra el resultado de un partido"""
     nuevo_partido = {
         "fase": partido.get('fase', 'groups'),
         "grupo": partido.get('grupo'),
@@ -386,43 +591,25 @@ def registrar_resultado_admin(partido, goles_local, goles_visitante):
 
     procesar_apuestas_partido(nuevo_partido)
     save_tournament_data(st.session_state.tournament_data)
-    st.success("✅ Resultado registrado y apuestas procesadas!")
+    st.success("Resultado registrado y apuestas procesadas")
     st.rerun()
 
 # Inicializar datos
 if 'tournament_data' not in st.session_state:
     st.session_state.tournament_data = load_tournament_data()
 
-# Header optimizado para móviles
-st.markdown("""
-    <style>
-    .main-header {
-        font-size: 24px !important;
-        text-align: center;
-        margin-bottom: 1rem;
-        color: #1f77b4;
-        font-weight: bold;
-    }
-    .section-header {
-        font-size: 18px !important;
-        margin-top: 1rem;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Header principal
+st.markdown('<div class="main-header">LIGA FIFA SPORTSBOOK</div>', unsafe_allow_html=True)
 
-st.markdown('<div class="main-header">⚽ LIGA FIFA - APUESTAS 🎯</div>', unsafe_allow_html=True)
-
-# Sidebar móvil optimizado
+# Sidebar
 with st.sidebar:
-    st.markdown("### 🎮 Panel de Control")
+    st.markdown('<div class="section-header">PANEL DE CONTROL</div>', unsafe_allow_html=True)
 
-    # Solo mostrar configuración si es el administrador
-    with st.expander("👤 Configuración (Admin)"):
-        # Registrar jugadores
-        st.markdown("#### 👥 Registrar Jugadores")
-        nuevo_jugador = st.text_input("Tu nombre", key="nuevo_jugador")
+    # Registro de jugadores
+    with st.expander("REGISTRO DE JUGADORES"):
+        nuevo_jugador = st.text_input("NOMBRE DEL JUGADOR", key="nuevo_jugador")
 
-        if st.button("Unirse al Juego", key="unirse_btn") and nuevo_jugador:
+        if st.button("REGISTRAR JUGADOR", key="unirse_btn") and nuevo_jugador:
             if nuevo_jugador.strip() and nuevo_jugador not in st.session_state.tournament_data["players"]:
                 st.session_state.tournament_data["players"][nuevo_jugador] = {
                     "dinero": 1000,
@@ -430,18 +617,18 @@ with st.sidebar:
                     "apuestas_perdidas": 0
                 }
                 save_tournament_data(st.session_state.tournament_data)
-                st.success(f"✅ {nuevo_jugador} unido con $1000")
+                st.success(f"Jugador {nuevo_jugador} registrado con $1000")
                 st.rerun()
             elif nuevo_jugador in st.session_state.tournament_data["players"]:
-                st.error("❌ Este nombre ya existe")
+                st.error("Este nombre ya está registrado")
             else:
-                st.error("❌ El nombre no puede estar vacío")
+                st.error("El nombre no puede estar vacío")
 
-    # Panel de apuestas (siempre visible)
+    # Panel de apuestas
     mostrar_panel_apuestas_movil()
 
-# Sección principal - Diseño móvil first
-tab1, tab2, tab3, tab4 = st.tabs(["🏆 Torneo", "📊 Apuestas", "📈 Posiciones", "⚙️ Admin"])
+# Navegación principal
+tab1, tab2, tab3, tab4 = st.tabs(["TORNEO", "MIS APUESTAS", "RANKING", "ADMIN"])
 
 with tab1:
     mostrar_torneo()
