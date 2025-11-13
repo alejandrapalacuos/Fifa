@@ -62,6 +62,26 @@ def obtener_partidos_sin_resultado():
 
     return partidos_sin_resultado
 
+def obtener_partidos_para_apostar():
+    """Obtiene partidos que aún no han comenzado (sin resultado)"""
+    partidos_para_apostar = []
+    partidos_con_resultado = [f"{p['local']} vs {p['visitante']}" for p in st.session_state.tournament_data["matches"]]
+    
+    for grupo, equipos in st.session_state.tournament_data["groups"].items():
+        for i, local in enumerate(equipos):
+            for j, visitante in enumerate(equipos):
+                if i != j:
+                    partido_key = f"{local} vs {visitante}"
+                    if partido_key not in partidos_con_resultado:
+                        partidos_para_apostar.append({
+                            "local": local,
+                            "visitante": visitante,
+                            "fase": "groups",
+                            "grupo": grupo
+                        })
+    
+    return partidos_para_apostar
+
 def calcular_tabla(grupo):
     """Calcula la tabla de posiciones de un grupo"""
     equipos = st.session_state.tournament_data["groups"][grupo]
@@ -150,14 +170,27 @@ def mostrar_panel_apuestas_movil():
         st.info("👤 Registra tu nombre arriba para apostar")
         return
 
-    jugador = st.selectbox("Eres:", list(st.session_state.tournament_data["players"].keys()))
+    # Selector de jugador
+    if 'jugador_actual' not in st.session_state:
+        st.session_state.jugador_actual = list(st.session_state.tournament_data["players"].keys())[0] if st.session_state.tournament_data["players"] else None
+
+    if st.session_state.jugador_actual:
+        jugador = st.selectbox(
+            "Eres:",
+            list(st.session_state.tournament_data["players"].keys()),
+            index=list(st.session_state.tournament_data["players"].keys()).index(st.session_state.jugador_actual)
+        )
+        st.session_state.jugador_actual = jugador
+    else:
+        jugador = st.selectbox("Eres:", list(st.session_state.tournament_data["players"].keys()))
+        st.session_state.jugador_actual = jugador
 
     # Mostrar dinero disponible
     dinero_actual = st.session_state.tournament_data["players"][jugador]["dinero"]
     st.markdown(f"**Dinero disponible:** `${dinero_actual}`")
 
     # Partidos disponibles para apostar
-    partidos_disponibles = obtener_partidos_sin_resultado()
+    partidos_disponibles = obtener_partidos_para_apostar()
 
     if not partidos_disponibles:
         st.info("⏳ No hay partidos para apostar")
@@ -254,10 +287,10 @@ def mostrar_torneo():
 
     # Próximos partidos
     st.markdown("### ⏭️ Próximos Partidos")
-    partidos_futuros = obtener_partidos_sin_resultado()[:3]  # Mostrar solo 3
+    partidos_futuros = obtener_partidos_para_apostar()[:3]  # Mostrar solo 3
     if partidos_futuros:
         for partido in partidos_futuros:
-            st.write(f"**{partido['local']}** vs **{partido['visitante']}**")
+            st.write(f"**{partido['local']}** vs **{partido['visitante']}** - {partido['grupo']}")
     else:
         st.info("🎉 Todos los partidos han sido jugados")
 
@@ -270,11 +303,20 @@ def mostrar_apuestas():
         return
 
     # Selector de jugador
-    jugador_actual = st.selectbox(
-        "Selecciona tu jugador:",
-        list(st.session_state.tournament_data["players"].keys()),
-        key="jugador_apuestas"
-    )
+    if 'jugador_actual' not in st.session_state or st.session_state.jugador_actual not in st.session_state.tournament_data["players"]:
+        jugador_actual = st.selectbox(
+            "Selecciona tu jugador:",
+            list(st.session_state.tournament_data["players"].keys()),
+            key="jugador_apuestas_select"
+        )
+    else:
+        jugador_actual = st.selectbox(
+            "Selecciona tu jugador:",
+            list(st.session_state.tournament_data["players"].keys()),
+            index=list(st.session_state.tournament_data["players"].keys()).index(st.session_state.jugador_actual),
+            key="jugador_apuestas_select"
+        )
+        st.session_state.jugador_actual = jugador_actual
 
     apuestas_jugador = [a for a in st.session_state.tournament_data["bets"] if a["jugador"] == jugador_actual]
 
@@ -320,20 +362,25 @@ def mostrar_posiciones():
     st.dataframe(df_jugadores, use_container_width=True, hide_index=True)
 
 def mostrar_admin():
-    """Muestra el panel de administración"""
+    """Muestra el panel de administración - SOLO PARA CONTROLAR RESULTADOS"""
     st.markdown("### ⚙️ Panel de Administración")
+    st.warning("🔒 Esta sección es solo para registrar resultados de partidos")
 
     # Registrar resultados
     st.markdown("#### 📝 Registrar Resultados")
-    partidos_sin_resultado = obtener_partidos_sin_resultado()
+    
+    # Obtener partidos que no tienen resultado (pueden tener apuestas)
+    partidos_sin_resultado = obtener_partidos_para_apostar()
 
     if partidos_sin_resultado:
         partido_registrar = st.selectbox(
             "Seleccionar partido:",
             partidos_sin_resultado,
-            format_func=lambda x: f"{x['local']} vs {x['visitante']}",
+            format_func=lambda x: f"{x['local']} vs {x['visitante']} - {x['grupo']}",
             key="admin_partido"
         )
+
+        st.markdown(f"**Partido seleccionado:** {partido_registrar['local']} vs {partido_registrar['visitante']}")
 
         col1, col2 = st.columns(2)
         with col1:
@@ -341,10 +388,17 @@ def mostrar_admin():
         with col2:
             goles_visitante = st.number_input("Goles visitante", min_value=0, value=0, key="admin_gv")
 
+        # Mostrar apuestas existentes para este partido
+        apuestas_partido = [a for a in st.session_state.tournament_data["bets"] 
+                           if a["partido"] == f"{partido_registrar['local']} vs {partido_registrar['visitante']}"]
+        
+        if apuestas_partido:
+            st.markdown(f"**Apuestas en este partido:** {len(apuestas_partido)}")
+        
         if st.button("Registrar Resultado", type="primary", key="registrar_btn"):
             registrar_resultado_admin(partido_registrar, goles_local, goles_visitante)
     else:
-        st.info("✅ Todos los partidos tienen resultado")
+        st.info("✅ Todos los partidos tienen resultado registrado")
 
     # Avanzar fases
     st.markdown("#### 🚀 Control del Torneo")
@@ -360,10 +414,13 @@ def mostrar_admin():
                 st.error("❌ No hay suficientes equipos clasificados")
 
     # Reiniciar
-    if st.button("🔄 Reiniciar Torneo", type="secondary", key="reiniciar_btn"):
+    st.markdown("#### 🔄 Reiniciar Sistema")
+    if st.button("Reiniciar Todo el Sistema", type="secondary", key="reiniciar_btn"):
         st.session_state.tournament_data = load_tournament_data()
+        if 'jugador_actual' in st.session_state:
+            del st.session_state.jugador_actual
         save_tournament_data(st.session_state.tournament_data)
-        st.success("🔄 Torneo reiniciado")
+        st.success("🔄 Sistema reiniciado completamente")
         st.rerun()
 
 def registrar_resultado_admin(partido, goles_local, goles_visitante):
@@ -416,26 +473,31 @@ st.markdown('<div class="main-header">⚽ LIGA FIFA - APUESTAS 🎯</div>', unsa
 with st.sidebar:
     st.markdown("### 🎮 Panel de Control")
 
-    # Solo mostrar configuración si es el administrador
-    with st.expander("👤 Configuración (Admin)"):
-        # Registrar jugadores
-        st.markdown("#### 👥 Registrar Jugadores")
-        nuevo_jugador = st.text_input("Tu nombre", key="nuevo_jugador")
+    # Registro de jugadores - VISIBLE PARA TODOS
+    st.markdown("#### 👥 Registro de Jugadores")
+    nuevo_jugador = st.text_input("Tu nombre", key="nuevo_jugador", placeholder="Ingresa tu nombre aquí")
 
-        if st.button("Unirse al Juego", key="unirse_btn") and nuevo_jugador:
-            if nuevo_jugador.strip() and nuevo_jugador not in st.session_state.tournament_data["players"]:
-                st.session_state.tournament_data["players"][nuevo_jugador] = {
-                    "dinero": 1000,
-                    "apuestas_ganadas": 0,
-                    "apuestas_perdidas": 0
-                }
-                save_tournament_data(st.session_state.tournament_data)
-                st.success(f"✅ {nuevo_jugador} unido con $1000")
-                st.rerun()
-            elif nuevo_jugador in st.session_state.tournament_data["players"]:
-                st.error("❌ Este nombre ya existe")
-            else:
-                st.error("❌ El nombre no puede estar vacío")
+    if st.button("Unirse al Juego", key="unirse_btn") and nuevo_jugador:
+        if nuevo_jugador.strip() and nuevo_jugador not in st.session_state.tournament_data["players"]:
+            st.session_state.tournament_data["players"][nuevo_jugador] = {
+                "dinero": 1000,
+                "apuestas_ganadas": 0,
+                "apuestas_perdidas": 0
+            }
+            st.session_state.jugador_actual = nuevo_jugador
+            save_tournament_data(st.session_state.tournament_data)
+            st.success(f"✅ {nuevo_jugador} unido con $1000")
+            st.rerun()
+        elif nuevo_jugador in st.session_state.tournament_data["players"]:
+            st.error("❌ Este nombre ya existe")
+        else:
+            st.error("❌ El nombre no puede estar vacío")
+
+    # Mostrar jugadores registrados
+    if st.session_state.tournament_data["players"]:
+        st.markdown("#### 👤 Jugadores Registrados")
+        for jugador in st.session_state.tournament_data["players"].keys():
+            st.write(f"• {jugador}")
 
     # Panel de apuestas (siempre visible)
     mostrar_panel_apuestas_movil()
