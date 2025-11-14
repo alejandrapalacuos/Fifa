@@ -21,7 +21,7 @@ def load_tournament_data():
         return {
             "groups": {
                 "Grupo A": ["Liverpool", "Bayern", "Atlético Nacional", "Barcelona"],
-                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín", "PSG"]
+                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín"]
             },
             "players": {},
             "matches": [],
