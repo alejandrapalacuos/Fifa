@@ -38,8 +38,8 @@ def load_tournament_data():
         # Si no existe el archivo o está corrupto, crear uno nuevo
         return {
             "groups": {
-                "Grupo A": ["Liverpool", "Atlético Nacional", "Barcelona"],  # Quitamos Bayern
-                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín"]
+                "Grupo A": ["Liverpool", "Atlético Nacional", "Barcelona", "Manchester City"],
+                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín", "PSG"]
             },
             "players": {
                 jugador: {
@@ -197,26 +197,31 @@ def mostrar_panel_apuestas_movil():
     col1, col2, col3 = st.columns(3)
 
     def hacer_apuesta_rapida(prediccion):
-        monto = min(200, dinero_actual)
-        if monto > dinero_actual or dinero_actual < 10:
+        # CORREGIDO: Usar el monto correcto y verificar fondos
+        monto_apuesta = 100  # Monto fijo para apuestas rápidas
+        
+        if monto_apuesta > dinero_actual:
             st.error("❌ No tienes suficiente dinero")
             return
         
+        # CORREGIDO: Crear nueva apuesta correctamente
         nueva_apuesta = {
             "jugador": jugador,
             "partido": f"{partido_apostar['local']} vs {partido_apostar['visitante']}",
             "local": partido_apostar['local'],
             "visitante": partido_apostar['visitante'],
             "prediccion": prediccion,
-            "monto": monto,
+            "monto": monto_apuesta,
             "fase": partido_apostar.get('fase', 'groups'),
-            "procesada": False
+            "procesada": False,
+            "resultado": "PENDIENTE"
         }
 
-        st.session_state.tournament_data["players"][jugador]["dinero"] -= monto
+        # CORREGIDO: Restar el monto correctamente
+        st.session_state.tournament_data["players"][jugador]["dinero"] -= monto_apuesta
         st.session_state.tournament_data["bets"].append(nueva_apuesta)
         save_tournament_data(st.session_state.tournament_data)
-        st.success(f"✅ Apostaste ${monto} por {prediccion}")
+        st.success(f"✅ Apostaste ${monto_apuesta} por {prediccion}")
         st.rerun()
 
     with col1:
@@ -238,11 +243,13 @@ def mostrar_panel_apuestas_movil():
         else:
             opcion_apuesta = st.selectbox("Predicción", ["Local", "Empate", "Visitante"], key="prediccion_select")
             
+            # CORREGIDO: Valor por defecto seguro
+            monto_default = min(100, dinero_actual)
             monto_apuesta = st.number_input(
                 "Monto", 
                 min_value=10, 
                 max_value=dinero_actual, 
-                value=min(100, dinero_actual), 
+                value=monto_default, 
                 step=10, 
                 key="monto_input"
             )
@@ -251,6 +258,7 @@ def mostrar_panel_apuestas_movil():
                 if monto_apuesta > dinero_actual:
                     st.error("❌ No tienes suficiente dinero")
                 else:
+                    # CORREGIDO: Crear apuesta personalizada correctamente
                     nueva_apuesta = {
                         "jugador": jugador,
                         "partido": f"{partido_apostar['local']} vs {partido_apostar['visitante']}",
@@ -259,9 +267,11 @@ def mostrar_panel_apuestas_movil():
                         "prediccion": opcion_apuesta,
                         "monto": monto_apuesta,
                         "fase": partido_apostar.get('fase', 'groups'),
-                        "procesada": False
+                        "procesada": False,
+                        "resultado": "PENDIENTE"
                     }
 
+                    # CORREGIDO: Restar el monto correctamente
                     st.session_state.tournament_data["players"][jugador]["dinero"] -= monto_apuesta
                     st.session_state.tournament_data["bets"].append(nueva_apuesta)
                     save_tournament_data(st.session_state.tournament_data)
