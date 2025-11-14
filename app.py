@@ -2,188 +2,229 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import time
 from datetime import datetime
+import logging
+
+# Configurar logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configuración para móviles
 st.set_page_config(
     page_title="Liga FIFA - Apuestas",
     page_icon="⚽",
     layout="wide",
-    initial_sidebar_state="collapsed"  # Sidebar cerrado en móviles
+    initial_sidebar_state="collapsed"
 )
 
-# Cargar datos del torneo
+# Datos por defecto del torneo
+DEFAULT_TOURNAMENT_DATA = {
+    "groups": {
+        "Grupo A": ["Liverpool", "Bayern", "Atlético Nacional", "Barcelona"],
+        "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín", "PSG"]
+    },
+    "players": {},
+    "matches": [],
+    "semifinals": [],
+    "final": None,
+    "third_place": None,
+    "phase": "groups",
+    "bets": []
+}
+
 def load_tournament_data():
-    try:
-        with open('data/tournament_data.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {
-            "groups": {
-                "Grupo A": ["Liverpool", "Bayern", "Atlético Nacional", "Barcelona"],
-                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín"]
-            },
-            "players": {},
-            "matches": [],
-            "semifinals": [],
-            "final": None,
-            "third_place": None,
-            "phase": "groups",
-            "bets": []
-        }
+    """Carga los datos del torneo de forma robusta"""
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # Verificar si el archivo existe y tiene contenido
+            if not os.path.exists('data/tournament_data.json'):
+                logger.info("Archivo no encontrado, creando datos por defecto")
+                return DEFAULT_TOURNAMENT_DATA.copy()
+            
+            with open('data/tournament_data.json', 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if not content:
+                    logger.warning("Archivo vacío, usando datos por defecto")
+                    return DEFAULT_TOURNAMENT_DATA.copy()
+                
+                data = json.loads(content)
+                
+                # Validar estructura básica
+                required_keys = ["groups", "players", "matches", "bets", "phase"]
+                if all(key in data for key in required_keys):
+                    logger.info("Datos cargados exitosamente")
+                    return data
+                else:
+                    logger.warning("Estructura de datos inválida, usando datos por defecto")
+                    return DEFAULT_TOURNAMENT_DATA.copy()
+                    
+        except json.JSONDecodeError as e:
+            logger.error(f"Error JSON (intento {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(0.1)  # Esperar antes de reintentar
+            else:
+                logger.error("Todos los intentos fallaron, usando datos por defecto")
+                return DEFAULT_TOURNAMENT_DATA.copy()
+        except Exception as e:
+            logger.error(f"Error inesperado: {e}")
+            return DEFAULT_TOURNAMENT_DATA.copy()
+    
+    return DEFAULT_TOURNAMENT_DATA.copy()
 
 def save_tournament_data(data):
-    os.makedirs('data', exist_ok=True)
-    with open('data/tournament_data.json', 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    """Guarda los datos del torneo de forma segura"""
+    try:
+        os.makedirs('data', exist_ok=True)
+        
+        # Guardar en archivo temporal primero
+        temp_file = 'data/tournament_data_temp.json'
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        # Reemplazar archivo original
+        if os.path.exists(temp_file):
+            os.replace(temp_file, 'data/tournament_data.json')
+            logger.info("Datos guardados exitosamente")
+            
+    except Exception as e:
+        logger.error(f"Error guardando datos: {e}")
+        st.error("Error al guardar los datos. Intenta nuevamente.")
 
 # Funciones auxiliares
-def obtener_partidos_sin_resultado():
-    """Obtiene partidos sin resultado registrado"""
-    partidos_sin_resultado = []
-
-    # Partidos de grupos sin jugar
-    for grupo, equipos in st.session_state.tournament_data["groups"].items():
-        for i, local in enumerate(equipos):
-            for j, visitante in enumerate(equipos):
-                if i != j:
-                    partido_jugado = any(
-                        p.get("local") == local and p.get("visitante") == visitante
-                        and p.get("fase") == "groups"
-                        for p in st.session_state.tournament_data["matches"]
-                    )
-                    if not partido_jugado:
-                        partidos_sin_resultado.append({
-                            "local": local,
-                            "visitante": visitante,
-                            "fase": "groups",
-                            "grupo": grupo
-                        })
-
-    return partidos_sin_resultado
-
 def obtener_partidos_para_apostar():
     """Obtiene partidos que aún no han comenzado (sin resultado)"""
-    partidos_para_apostar = []
-    partidos_con_resultado = [f"{p['local']} vs {p['visitante']}" for p in st.session_state.tournament_data["matches"]]
-    
-    for grupo, equipos in st.session_state.tournament_data["groups"].items():
-        for i, local in enumerate(equipos):
-            for j, visitante in enumerate(equipos):
-                if i != j:
-                    partido_key = f"{local} vs {visitante}"
-                    if partido_key not in partidos_con_resultado:
-                        partidos_para_apostar.append({
-                            "local": local,
-                            "visitante": visitante,
-                            "fase": "groups",
-                            "grupo": grupo
-                        })
-    
-    return partidos_para_apostar
+    try:
+        partidos_para_apostar = []
+        partidos_con_resultado = [f"{p['local']} vs {p['visitante']}" 
+                                for p in st.session_state.tournament_data["matches"]]
+        
+        for grupo, equipos in st.session_state.tournament_data["groups"].items():
+            for i, local in enumerate(equipos):
+                for j, visitante in enumerate(equipos):
+                    if i != j:
+                        partido_key = f"{local} vs {visitante}"
+                        if partido_key not in partidos_con_resultado:
+                            partidos_para_apostar.append({
+                                "local": local,
+                                "visitante": visitante,
+                                "fase": "groups",
+                                "grupo": grupo
+                            })
+        
+        return partidos_para_apostar
+    except Exception as e:
+        logger.error(f"Error obteniendo partidos: {e}")
+        return []
 
 def calcular_tabla(grupo):
     """Calcula la tabla de posiciones de un grupo"""
-    equipos = st.session_state.tournament_data["groups"][grupo]
-    partidos = [p for p in st.session_state.tournament_data["matches"]
-                if p.get("grupo") == grupo and p.get("fase") == "groups"]
+    try:
+        equipos = st.session_state.tournament_data["groups"][grupo]
+        partidos = [p for p in st.session_state.tournament_data["matches"]
+                    if p.get("grupo") == grupo and p.get("fase") == "groups"]
 
-    tabla = {}
-    for equipo in equipos:
-        tabla[equipo] = {"PJ": 0, "G": 0, "E": 0, "P": 0, "GF": 0, "GC": 0, "DG": 0, "PTS": 0}
+        tabla = {}
+        for equipo in equipos:
+            tabla[equipo] = {"PJ": 0, "G": 0, "E": 0, "P": 0, "GF": 0, "GC": 0, "DG": 0, "PTS": 0}
 
-    for partido in partidos:
-        local = partido["local"]
-        visitante = partido["visitante"]
-        gl = partido["goles_local"]
-        gv = partido["goles_visitante"]
+        for partido in partidos:
+            local = partido["local"]
+            visitante = partido["visitante"]
+            gl = partido["goles_local"]
+            gv = partido["goles_visitante"]
 
-        for equipo, goles_favor, goles_contra in [(local, gl, gv), (visitante, gv, gl)]:
-            if equipo in tabla:
-                tabla[equipo]["PJ"] += 1
-                tabla[equipo]["GF"] += goles_favor
-                tabla[equipo]["GC"] += goles_contra
-                tabla[equipo]["DG"] = tabla[equipo]["GF"] - tabla[equipo]["GC"]
+            for equipo, goles_favor, goles_contra in [(local, gl, gv), (visitante, gv, gl)]:
+                if equipo in tabla:
+                    tabla[equipo]["PJ"] += 1
+                    tabla[equipo]["GF"] += goles_favor
+                    tabla[equipo]["GC"] += goles_contra
+                    tabla[equipo]["DG"] = tabla[equipo]["GF"] - tabla[equipo]["GC"]
 
-        if gl > gv:
-            tabla[local]["G"] += 1
-            tabla[local]["PTS"] += 3
-            tabla[visitante]["P"] += 1
-        elif gv > gl:
-            tabla[visitante]["G"] += 1
-            tabla[visitante]["PTS"] += 3
-            tabla[local]["P"] += 1
-        else:
-            tabla[local]["E"] += 1
-            tabla[visitante]["E"] += 1
-            tabla[local]["PTS"] += 1
-            tabla[visitante]["PTS"] += 1
+            if gl > gv:
+                tabla[local]["G"] += 1
+                tabla[local]["PTS"] += 3
+                tabla[visitante]["P"] += 1
+            elif gv > gl:
+                tabla[visitante]["G"] += 1
+                tabla[visitante]["PTS"] += 3
+                tabla[local]["P"] += 1
+            else:
+                tabla[local]["E"] += 1
+                tabla[visitante]["E"] += 1
+                tabla[local]["PTS"] += 1
+                tabla[visitante]["PTS"] += 1
 
-    df = pd.DataFrame.from_dict(tabla, orient='index')
-    df = df.reset_index().rename(columns={"index": "Equipo"})
-    df = df.sort_values(by=["PTS", "DG", "GF"], ascending=[False, False, False])
-    return df
+        df = pd.DataFrame.from_dict(tabla, orient='index')
+        df = df.reset_index().rename(columns={"index": "Equipo"})
+        df = df.sort_values(by=["PTS", "DG", "GF"], ascending=[False, False, False])
+        return df
+    except Exception as e:
+        logger.error(f"Error calculando tabla: {e}")
+        return pd.DataFrame()
 
 def obtener_clasificados_semifinales():
     """Obtiene los clasificados a semifinales"""
-    clasificados = []
-    for grupo in ["Grupo A", "Grupo B"]:
-        df = calcular_tabla(grupo)
-        top2 = df.head(2)["Equipo"].tolist()
-        clasificados.extend(top2)
-    return clasificados
+    try:
+        clasificados = []
+        for grupo in ["Grupo A", "Grupo B"]:
+            df = calcular_tabla(grupo)
+            if not df.empty:
+                top2 = df.head(2)["Equipo"].tolist()
+                clasificados.extend(top2)
+        return clasificados
+    except Exception as e:
+        logger.error(f"Error obteniendo clasificados: {e}")
+        return []
 
 def procesar_apuestas_partido(partido):
     """Procesa las apuestas de un partido"""
-    partido_key = f"{partido['local']} vs {partido['visitante']}"
-    goles_local = partido['goles_local']
-    goles_visitante = partido['goles_visitante']
+    try:
+        partido_key = f"{partido['local']} vs {partido['visitante']}"
+        goles_local = partido['goles_local']
+        goles_visitante = partido['goles_visitante']
 
-    if goles_local > goles_visitante:
-        resultado_real = "Local"
-    elif goles_visitante > goles_local:
-        resultado_real = "Visitante"
-    else:
-        resultado_real = "Empate"
+        if goles_local > goles_visitante:
+            resultado_real = "Local"
+        elif goles_visitante > goles_local:
+            resultado_real = "Visitante"
+        else:
+            resultado_real = "Empate"
 
-    for apuesta in st.session_state.tournament_data["bets"]:
-        if not apuesta["procesada"] and apuesta["partido"] == partido_key:
-            if apuesta["prediccion"] == resultado_real:
-                monto_ganado = apuesta["monto"] * 2
-                st.session_state.tournament_data["players"][apuesta["jugador"]]["dinero"] += monto_ganado
-                st.session_state.tournament_data["players"][apuesta["jugador"]]["apuestas_ganadas"] += 1
-                apuesta["resultado"] = "GANADA"
-                apuesta["ganancias"] = monto_ganado
-            else:
-                st.session_state.tournament_data["players"][apuesta["jugador"]]["apuestas_perdidas"] += 1
-                apuesta["resultado"] = "PERDIDA"
-                apuesta["ganancias"] = 0
+        for apuesta in st.session_state.tournament_data["bets"]:
+            if not apuesta.get("procesada", False) and apuesta["partido"] == partido_key:
+                if apuesta["prediccion"] == resultado_real:
+                    monto_ganado = apuesta["monto"] * 2
+                    st.session_state.tournament_data["players"][apuesta["jugador"]]["dinero"] += monto_ganado
+                    st.session_state.tournament_data["players"][apuesta["jugador"]]["apuestas_ganadas"] += 1
+                    apuesta["resultado"] = "GANADA"
+                    apuesta["ganancias"] = monto_ganado
+                else:
+                    st.session_state.tournament_data["players"][apuesta["jugador"]]["apuestas_perdidas"] += 1
+                    apuesta["resultado"] = "PERDIDA"
+                    apuesta["ganancias"] = 0
 
-            apuesta["procesada"] = True
+                apuesta["procesada"] = True
+    except Exception as e:
+        logger.error(f"Error procesando apuestas: {e}")
 
 # Funciones de UI
 def mostrar_panel_apuestas_movil():
     """Muestra el panel de apuestas en el sidebar"""
     st.markdown("### 🎯 Hacer Apuesta")
 
-    if not st.session_state.tournament_data["players"]:
+    if not st.session_state.tournament_data.get("players"):
         st.info("👤 Registra tu nombre arriba para apostar")
         return
 
     # Selector de jugador
-    if 'jugador_actual' not in st.session_state:
-        st.session_state.jugador_actual = list(st.session_state.tournament_data["players"].keys())[0] if st.session_state.tournament_data["players"] else None
+    jugadores = list(st.session_state.tournament_data["players"].keys())
+    if not jugadores:
+        st.info("👤 Registra tu nombre primero")
+        return
 
-    if st.session_state.jugador_actual:
-        jugador = st.selectbox(
-            "Eres:",
-            list(st.session_state.tournament_data["players"].keys()),
-            index=list(st.session_state.tournament_data["players"].keys()).index(st.session_state.jugador_actual)
-        )
-        st.session_state.jugador_actual = jugador
-    else:
-        jugador = st.selectbox("Eres:", list(st.session_state.tournament_data["players"].keys()))
-        st.session_state.jugador_actual = jugador
+    jugador = st.selectbox("Eres:", jugadores)
 
     # Mostrar dinero disponible
     dinero_actual = st.session_state.tournament_data["players"][jugador]["dinero"]
@@ -208,27 +249,31 @@ def mostrar_panel_apuestas_movil():
     col1, col2, col3 = st.columns(3)
 
     def hacer_apuesta_rapida(prediccion):
-        monto = min(200, dinero_actual)
-        if monto > dinero_actual:
-            st.error("❌ No tienes suficiente dinero")
-            return
-        
-        nueva_apuesta = {
-            "jugador": jugador,
-            "partido": f"{partido_apostar['local']} vs {partido_apostar['visitante']}",
-            "local": partido_apostar['local'],
-            "visitante": partido_apostar['visitante'],
-            "prediccion": prediccion,
-            "monto": monto,
-            "fase": partido_apostar.get('fase', 'groups'),
-            "procesada": False
-        }
+        try:
+            monto = min(200, dinero_actual)
+            if monto > dinero_actual:
+                st.error("❌ No tienes suficiente dinero")
+                return
+            
+            nueva_apuesta = {
+                "jugador": jugador,
+                "partido": f"{partido_apostar['local']} vs {partido_apostar['visitante']}",
+                "local": partido_apostar['local'],
+                "visitante": partido_apostar['visitante'],
+                "prediccion": prediccion,
+                "monto": monto,
+                "fase": partido_apostar.get('fase', 'groups'),
+                "procesada": False
+            }
 
-        st.session_state.tournament_data["players"][jugador]["dinero"] -= monto
-        st.session_state.tournament_data["bets"].append(nueva_apuesta)
-        save_tournament_data(st.session_state.tournament_data)
-        st.success(f"✅ Apostaste ${monto} por {prediccion}")
-        st.rerun()
+            st.session_state.tournament_data["players"][jugador]["dinero"] -= monto
+            st.session_state.tournament_data["bets"].append(nueva_apuesta)
+            save_tournament_data(st.session_state.tournament_data)
+            st.success(f"✅ Apostaste ${monto} por {prediccion}")
+            st.rerun()
+        except Exception as e:
+            logger.error(f"Error haciendo apuesta: {e}")
+            st.error("❌ Error al realizar la apuesta")
 
     with col1:
         if st.button(f"🏠 {partido_apostar['local']}", use_container_width=True, key="local_btn"):
@@ -248,26 +293,30 @@ def mostrar_panel_apuestas_movil():
         monto_apuesta = st.number_input("Monto", min_value=10, max_value=dinero_actual, value=100, step=10, key="monto_input")
 
         if st.button("Apostar", type="primary", key="apostar_btn"):
-            if monto_apuesta > dinero_actual:
-                st.error("❌ No tienes suficiente dinero")
-                return
+            try:
+                if monto_apuesta > dinero_actual:
+                    st.error("❌ No tienes suficiente dinero")
+                    return
 
-            nueva_apuesta = {
-                "jugador": jugador,
-                "partido": f"{partido_apostar['local']} vs {partido_apostar['visitante']}",
-                "local": partido_apostar['local'],
-                "visitante": partido_apostar['visitante'],
-                "prediccion": opcion_apuesta,
-                "monto": monto_apuesta,
-                "fase": partido_apostar.get('fase', 'groups'),
-                "procesada": False
-            }
+                nueva_apuesta = {
+                    "jugador": jugador,
+                    "partido": f"{partido_apostar['local']} vs {partido_apostar['visitante']}",
+                    "local": partido_apostar['local'],
+                    "visitante": partido_apostar['visitante'],
+                    "prediccion": opcion_apuesta,
+                    "monto": monto_apuesta,
+                    "fase": partido_apostar.get('fase', 'groups'),
+                    "procesada": False
+                }
 
-            st.session_state.tournament_data["players"][jugador]["dinero"] -= monto_apuesta
-            st.session_state.tournament_data["bets"].append(nueva_apuesta)
-            save_tournament_data(st.session_state.tournament_data)
-            st.success(f"✅ Apostaste ${monto_apuesta} por {opcion_apuesta}")
-            st.rerun()
+                st.session_state.tournament_data["players"][jugador]["dinero"] -= monto_apuesta
+                st.session_state.tournament_data["bets"].append(nueva_apuesta)
+                save_tournament_data(st.session_state.tournament_data)
+                st.success(f"✅ Apostaste ${monto_apuesta} por {opcion_apuesta}")
+                st.rerun()
+            except Exception as e:
+                logger.error(f"Error en apuesta personalizada: {e}")
+                st.error("❌ Error al realizar la apuesta")
 
 def mostrar_torneo():
     """Muestra la información del torneo"""
@@ -278,16 +327,22 @@ def mostrar_torneo():
     with col1:
         st.markdown("**Grupo A**")
         df_a = calcular_tabla("Grupo A")
-        st.dataframe(df_a, use_container_width=True, hide_index=True)
+        if not df_a.empty:
+            st.dataframe(df_a, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay datos del grupo A")
 
     with col2:
         st.markdown("**Grupo B**")
         df_b = calcular_tabla("Grupo B")
-        st.dataframe(df_b, use_container_width=True, hide_index=True)
+        if not df_b.empty:
+            st.dataframe(df_b, use_container_width=True, hide_index=True)
+        else:
+            st.info("No hay datos del grupo B")
 
     # Próximos partidos
     st.markdown("### ⏭️ Próximos Partidos")
-    partidos_futuros = obtener_partidos_para_apostar()[:3]  # Mostrar solo 3
+    partidos_futuros = obtener_partidos_para_apostar()[:3]
     if partidos_futuros:
         for partido in partidos_futuros:
             st.write(f"**{partido['local']}** vs **{partido['visitante']}** - {partido['grupo']}")
@@ -298,27 +353,23 @@ def mostrar_apuestas():
     """Muestra el historial de apuestas"""
     st.markdown("### 📋 Tus Apuestas")
 
-    if not st.session_state.tournament_data["players"]:
+    if not st.session_state.tournament_data.get("players"):
         st.info("👤 Regístrate en el panel de control")
         return
 
     # Selector de jugador
-    if 'jugador_actual' not in st.session_state or st.session_state.jugador_actual not in st.session_state.tournament_data["players"]:
-        jugador_actual = st.selectbox(
-            "Selecciona tu jugador:",
-            list(st.session_state.tournament_data["players"].keys()),
-            key="jugador_apuestas_select"
-        )
-    else:
-        jugador_actual = st.selectbox(
-            "Selecciona tu jugador:",
-            list(st.session_state.tournament_data["players"].keys()),
-            index=list(st.session_state.tournament_data["players"].keys()).index(st.session_state.jugador_actual),
-            key="jugador_apuestas_select"
-        )
-        st.session_state.jugador_actual = jugador_actual
+    jugadores = list(st.session_state.tournament_data["players"].keys())
+    if not jugadores:
+        st.info("👤 No hay jugadores registrados")
+        return
 
-    apuestas_jugador = [a for a in st.session_state.tournament_data["bets"] if a["jugador"] == jugador_actual]
+    jugador_actual = st.selectbox(
+        "Selecciona tu jugador:",
+        jugadores,
+        key="jugador_apuestas"
+    )
+
+    apuestas_jugador = [a for a in st.session_state.tournament_data.get("bets", []) if a["jugador"] == jugador_actual]
 
     if not apuestas_jugador:
         st.info("📝 Aún no has hecho apuestas")
@@ -342,7 +393,7 @@ def mostrar_posiciones():
     """Muestra el ranking de apostadores"""
     st.markdown("### 🏆 Ranking de Apostadores")
 
-    if not st.session_state.tournament_data["players"]:
+    if not st.session_state.tournament_data.get("players"):
         st.info("👥 Aún no hay jugadores")
         return
 
@@ -351,9 +402,9 @@ def mostrar_posiciones():
         jugadores_data.append({
             "Jugador": jugador,
             "Dinero": datos['dinero'],
-            "Ganadas": datos["apuestas_ganadas"],
-            "Perdidas": datos["apuestas_perdidas"],
-            "Balance": datos["apuestas_ganadas"] - datos["apuestas_perdidas"]
+            "Ganadas": datos.get("apuestas_ganadas", 0),
+            "Perdidas": datos.get("apuestas_perdidas", 0),
+            "Balance": datos.get("apuestas_ganadas", 0) - datos.get("apuestas_perdidas", 0)
         })
 
     df_jugadores = pd.DataFrame(jugadores_data)
@@ -369,7 +420,6 @@ def mostrar_admin():
     # Registrar resultados
     st.markdown("#### 📝 Registrar Resultados")
     
-    # Obtener partidos que no tienen resultado (pueden tener apuestas)
     partidos_sin_resultado = obtener_partidos_para_apostar()
 
     if partidos_sin_resultado:
@@ -389,39 +439,49 @@ def mostrar_admin():
             goles_visitante = st.number_input("Goles visitante", min_value=0, value=0, key="admin_gv")
 
         # Mostrar apuestas existentes para este partido
-        apuestas_partido = [a for a in st.session_state.tournament_data["bets"] 
+        apuestas_partido = [a for a in st.session_state.tournament_data.get("bets", []) 
                            if a["partido"] == f"{partido_registrar['local']} vs {partido_registrar['visitante']}"]
         
         if apuestas_partido:
             st.markdown(f"**Apuestas en este partido:** {len(apuestas_partido)}")
         
         if st.button("Registrar Resultado", type="primary", key="registrar_btn"):
-            registrar_resultado_admin(partido_registrar, goles_local, goles_visitante)
+            try:
+                registrar_resultado_admin(partido_registrar, goles_local, goles_visitante)
+            except Exception as e:
+                logger.error(f"Error registrando resultado: {e}")
+                st.error("❌ Error al registrar resultado")
     else:
         st.info("✅ Todos los partidos tienen resultado registrado")
 
     # Avanzar fases
     st.markdown("#### 🚀 Control del Torneo")
-    if st.session_state.tournament_data["phase"] == "groups":
+    if st.session_state.tournament_data.get("phase") == "groups":
         if st.button("Avanzar a Semifinales", key="avanzar_btn"):
-            clasificados = obtener_clasificados_semifinales()
-            if len(clasificados) == 4:
-                st.session_state.tournament_data["phase"] = "semifinals"
-                save_tournament_data(st.session_state.tournament_data)
-                st.success("🎉 Avanzando a Semifinales!")
-                st.rerun()
-            else:
-                st.error("❌ No hay suficientes equipos clasificados")
+            try:
+                clasificados = obtener_clasificados_semifinales()
+                if len(clasificados) == 4:
+                    st.session_state.tournament_data["phase"] = "semifinals"
+                    save_tournament_data(st.session_state.tournament_data)
+                    st.success("🎉 Avanzando a Semifinales!")
+                    st.rerun()
+                else:
+                    st.error("❌ No hay suficientes equipos clasificados")
+            except Exception as e:
+                logger.error(f"Error avanzando fases: {e}")
+                st.error("❌ Error al avanzar fases")
 
     # Reiniciar
     st.markdown("#### 🔄 Reiniciar Sistema")
     if st.button("Reiniciar Todo el Sistema", type="secondary", key="reiniciar_btn"):
-        st.session_state.tournament_data = load_tournament_data()
-        if 'jugador_actual' in st.session_state:
-            del st.session_state.jugador_actual
-        save_tournament_data(st.session_state.tournament_data)
-        st.success("🔄 Sistema reiniciado completamente")
-        st.rerun()
+        try:
+            st.session_state.tournament_data = DEFAULT_TOURNAMENT_DATA.copy()
+            save_tournament_data(st.session_state.tournament_data)
+            st.success("🔄 Sistema reiniciado completamente")
+            st.rerun()
+        except Exception as e:
+            logger.error(f"Error reiniciando sistema: {e}")
+            st.error("❌ Error al reiniciar el sistema")
 
 def registrar_resultado_admin(partido, goles_local, goles_visitante):
     """Registra el resultado de un partido"""
@@ -446,9 +506,14 @@ def registrar_resultado_admin(partido, goles_local, goles_visitante):
     st.success("✅ Resultado registrado y apuestas procesadas!")
     st.rerun()
 
-# Inicializar datos
+# Inicializar datos de forma segura
 if 'tournament_data' not in st.session_state:
-    st.session_state.tournament_data = load_tournament_data()
+    try:
+        st.session_state.tournament_data = load_tournament_data()
+    except Exception as e:
+        logger.error(f"Error crítico inicializando datos: {e}")
+        st.session_state.tournament_data = DEFAULT_TOURNAMENT_DATA.copy()
+        st.error("⚠️ Se cargaron datos por defecto debido a un error")
 
 # Header optimizado para móviles
 st.markdown("""
@@ -478,26 +543,31 @@ with st.sidebar:
     nuevo_jugador = st.text_input("Tu nombre", key="nuevo_jugador", placeholder="Ingresa tu nombre aquí")
 
     if st.button("Unirse al Juego", key="unirse_btn") and nuevo_jugador:
-        if nuevo_jugador.strip() and nuevo_jugador not in st.session_state.tournament_data["players"]:
-            st.session_state.tournament_data["players"][nuevo_jugador] = {
-                "dinero": 1000,
-                "apuestas_ganadas": 0,
-                "apuestas_perdidas": 0
-            }
-            st.session_state.jugador_actual = nuevo_jugador
-            save_tournament_data(st.session_state.tournament_data)
-            st.success(f"✅ {nuevo_jugador} unido con $1000")
-            st.rerun()
-        elif nuevo_jugador in st.session_state.tournament_data["players"]:
-            st.error("❌ Este nombre ya existe")
-        else:
-            st.error("❌ El nombre no puede estar vacío")
+        try:
+            if nuevo_jugador.strip() and nuevo_jugador not in st.session_state.tournament_data["players"]:
+                st.session_state.tournament_data["players"][nuevo_jugador] = {
+                    "dinero": 1000,
+                    "apuestas_ganadas": 0,
+                    "apuestas_perdidas": 0
+                }
+                save_tournament_data(st.session_state.tournament_data)
+                st.success(f"✅ {nuevo_jugador} unido con $1000")
+                st.rerun()
+            elif nuevo_jugador in st.session_state.tournament_data["players"]:
+                st.error("❌ Este nombre ya existe")
+            else:
+                st.error("❌ El nombre no puede estar vacío")
+        except Exception as e:
+            logger.error(f"Error registrando jugador: {e}")
+            st.error("❌ Error al registrar jugador")
 
     # Mostrar jugadores registrados
-    if st.session_state.tournament_data["players"]:
+    if st.session_state.tournament_data.get("players"):
         st.markdown("#### 👤 Jugadores Registrados")
-        for jugador in st.session_state.tournament_data["players"].keys():
+        for jugador in list(st.session_state.tournament_data["players"].keys())[:10]:  # Mostrar solo primeros 10
             st.write(f"• {jugador}")
+        if len(st.session_state.tournament_data["players"]) > 10:
+            st.write(f"... y {len(st.session_state.tournament_data['players']) - 10} más")
 
     # Panel de apuestas (siempre visible)
     mostrar_panel_apuestas_movil()
@@ -516,3 +586,4 @@ with tab3:
 
 with tab4:
     mostrar_admin()
+    
