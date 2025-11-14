@@ -38,8 +38,8 @@ def load_tournament_data():
         # Si no existe el archivo o está corrupto, crear uno nuevo
         return {
             "groups": {
-                "Grupo A": ["Liverpool", "Atlético Nacional", "Barcelona", "Manchester City"],  # Quitamos Bayern
-                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín", "PSG"]
+                "Grupo A": ["Liverpool", "Atlético Nacional", "Barcelona"],  # Quitamos Bayern
+                "Grupo B": ["Real Madrid", "AC Milán", "Independiente Medellín"]
             },
             "players": {
                 jugador: {
