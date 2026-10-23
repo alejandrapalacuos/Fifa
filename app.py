@@ -14,8 +14,8 @@ st.set_page_config(
 
 # Jugadores predeterminados (10 jugadores)
 JUGADORES_PREDETERMINADOS = [
-    "Tomás", "Lezcano", "Bawe", "Juanda", "Fili", 
-    "Higinio", "David", "Anto", "Cata", "Aleja"
+    "Tomás", "Bawe", "Snapy", "Fili", 
+    "Higinio", "Lucho", "Susana", "Copito", "Aleja"
 ]
 
 # Cargar datos del torneo
